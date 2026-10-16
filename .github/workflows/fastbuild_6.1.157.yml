@@ -129,11 +129,17 @@ jobs:
           sudo chmod +x /usr/bin/ccache &&
           rm -f ./ccache &
           
-          echo "正在克隆源码仓库..."
+          echo "正在克隆源码仓库(内核主仓库)..."
           aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6989/archive/refs/heads/oneplus/mt6989_b_16.0.0_ace5_race.zip -o common.zip && 
           unzip -q common.zip && 
           mv "android_kernel_oneplus_mt6989-oneplus-mt6989_b_16.0.0_ace5_race" common &&
           rm -rf common.zip &
+          
+          echo "正在克隆 vendor 仓库(补齐 oplus 驱动/符号链接)..." &&
+          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6989/archive/refs/heads/oneplus/mt6989_b_16.0.0_ace5_race.zip -o vendor.zip &&
+          unzip -q vendor.zip &&
+          mv "android_kernel_modules_and_devicetree_oneplus_mt6989-oneplus-mt6989_b_16.0.0_ace5_race" vendor_src &&
+          rm -rf vendor.zip &
           
           echo "正在克隆llvm-Clang20工具链..." &&
           mkdir -p clang20 &&
@@ -148,6 +154,31 @@ jobs:
           
           wait
           echo "所有源码及llvm-Clang20工具链初始化完成！"
+          echo "正在用 vendor 仓库补齐内核源码中的断链符号链接(oplus 驱动)..."
+          # 内核主仓库里 drivers/soc/oplus/* 等是指向 vendor/oplus/ 的符号链接,
+          # GitHub archive 不含该子树 -> 从官方 modules_and_devicetree 仓库实体化补齐
+          VEN="vendor_src"
+          for pair in \
+            "drivers/soc/oplus/oplus_resctrl:vendor/oplus/kernel/oplus_performance/oplus_resctrl" \
+            "drivers/soc/oplus/storage:vendor/oplus/kernel/storage" \
+            "include/soc/oplus/storage:vendor/oplus/kernel/storage/include" \
+            "kernel/oplus_cpu:vendor/oplus/kernel/cpu" \
+            "kernel/locking/locking_main.h:vendor/oplus/kernel/synchronize/oplus_locking.h" \
+            "kernel/locking/oplus_locking.c:vendor/oplus/kernel/synchronize/oplus_locking.c" \
+            "kernel/locking/sa_common_struct.h:vendor/oplus/kernel/cpu/sched/sched_assist/sa_common_struct.h" \
+            "mm/mm-trace.h:vendor/oplus/kernel/mm/mm_osvelte/mm-trace.h" ; do
+            DST="common/${pair%%:*}"; SRC="$VEN/${pair##*:}"
+            if [ -e "$SRC" ]; then
+              rm -rf "$DST"
+              mkdir -p "$(dirname "$DST")"
+              cp -a "$SRC" "$DST"
+              echo "   补齐: ${pair%%:*}"
+            else
+              echo "   警告: vendor 缺 ${pair##*:}"
+            fi
+          done
+          rm -rf "$VEN"
+          echo "断链补齐完成！"
           echo "正在去除 ABI 保护 & 去除 dirty 后缀..."
           rm common/android/abi_gki_protected_exports_* || true
           for f in common/scripts/setlocalversion; do
