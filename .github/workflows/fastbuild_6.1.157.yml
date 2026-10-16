@@ -400,6 +400,12 @@ jobs:
           # "is not set" → 编出的 Image 缺 MTK 中断控制器 → 卡开机 logo。
           # 故下载设备黄金 config 替换 gki_defconfig, 100% 保留平台配置。
           wget -q https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/device_config/golden_defconfig -O ./common/arch/arm64/configs/gki_defconfig
+          # sanitize: 设备 config 的 MODULE_SIG_KEY 指向 vendor 变量 $(DEVICE_MODULES_REL_DIR)/certs/...
+          # 独立 core 构建无该变量 → 展开成 /certs/mtk_signing_key.pem → 报错。
+          # 改回内核默认的 certs/signing_key.pem (构建时自动生成)。
+          sed -i 's#CONFIG_MODULE_SIG_KEY="\$(DEVICE_MODULES_REL_DIR)/certs/mtk_signing_key.pem"#CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"#' ./common/arch/arm64/configs/gki_defconfig
+          grep -q 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' ./common/arch/arm64/configs/gki_defconfig || \
+            echo 'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"' >> ./common/arch/arm64/configs/gki_defconfig
           echo "已用设备黄金 config 替换 gki_defconfig: $(wc -l < ./common/arch/arm64/configs/gki_defconfig) 行"
           echo "  ARCH_MEDIATEK: $(grep -c 'CONFIG_ARCH_MEDIATEK=y' ./common/arch/arm64/configs/gki_defconfig)"
           echo "  MTK_CPUX_TIMER: $(grep -c 'CONFIG_MTK_CPUX_TIMER=y' ./common/arch/arm64/configs/gki_defconfig)"
