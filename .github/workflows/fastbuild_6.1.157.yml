@@ -394,10 +394,21 @@ jobs:
       - name: 添加 KSU & 其他配置项
         run: |
           cd kernel_workspace
+          # ★★★ 关键修复 (TermAI): 用设备真实 /proc/config.gz 作为基座 ★★★
+          # 设备是 MTK6989 定制 GKI core: CONFIG_ARCH_MEDIATEK=y (含 mtk_sysirq/mtk_cirq/
+          # mtk_cpux_clkevt 等开机必需的中断/时钟源)。上游 gki_defconfig 会把这些设为
+          # "is not set" → 编出的 Image 缺 MTK 中断控制器 → 卡开机 logo。
+          # 故下载设备黄金 config 替换 gki_defconfig, 100% 保留平台配置。
+          wget -q https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/device_config/golden_defconfig -O ./common/arch/arm64/configs/gki_defconfig
+          echo "已用设备黄金 config 替换 gki_defconfig: $(wc -l < ./common/arch/arm64/configs/gki_defconfig) 行"
+          echo "  ARCH_MEDIATEK: $(grep -c 'CONFIG_ARCH_MEDIATEK=y' ./common/arch/arm64/configs/gki_defconfig)"
+          echo "  MTK_CPUX_TIMER: $(grep -c 'CONFIG_MTK_CPUX_TIMER=y' ./common/arch/arm64/configs/gki_defconfig)"
+          # 追加 KSU/SUSFS (设备 config 里没有, 由 golden_defconfig 已含基本项, 这里按开关补)
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
           if [[ "${{ github.event.inputs.susfs_enable }}" == "false" ]]; then
             echo "CONFIG_KSU_SUSFS=n" >> ./common/arch/arm64/configs/gki_defconfig
           fi
+          # 保留官方 CMDLINE/版本号
           #添加对 Mountify (backslashxx/mountify) 模块的支持
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
